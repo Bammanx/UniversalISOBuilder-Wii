@@ -15,7 +15,7 @@ namespace UniversalISOBuilder
         [STAThread]
         static void Main(string[] args)
         {
-            Console.WriteLine("Asu's Riivolution Universal ISO Builder - v0.5.0");
+            Console.WriteLine("Asu's Riivolution Universal ISO Builder - v0.6.0");
             Console.WriteLine("Special Beta Test Build - Please build all the mods you can think of with this ISO Builder and report me any bugs on discord: Asu-chan#2929");
             RiivolutionUniversalISOBuilder ruib = new RiivolutionUniversalISOBuilder();
             ruib.Main(args);
@@ -28,7 +28,7 @@ namespace UniversalISOBuilder
 
         public void Main(string[] args)
         {
-            string ISOPath = "", xmlPath = "", rootPath = "", outPath = "";
+            string ISOPath = "", xmlPath = "", rootPath = "", outPath = "", singleChoice = "Ask", newTitleID = "";
             bool isSilent = false, deleteISO = true,  isThereDefinedPaths = false;
             if (args.Length > 0) // Arguments
             {
@@ -41,6 +41,10 @@ namespace UniversalISOBuilder
                     Console.WriteLine("       In the 2nd and 3rd cases, you will be asked for the file paths.\r\n\r\n"); // Thanks to Mullkaw for correcting my weird-sounding english! ^^
                     Console.WriteLine("Options: --silent                  -> Prevents from displaying any console outputs apart from the necessary ones");
                     Console.WriteLine("         --keep-extracted-iso      -> Prevents the extractedISO folder from being deleted after the end of the process");
+                    Console.WriteLine("         --always-single-choice    -> Enables by default any option that has only one choice");
+                    Console.WriteLine("         --never-single-choice     -> Disable by default any option that has only one choice");
+                    Console.WriteLine("         --title-id <TitleID>      -> Changes the TitleID of the output rom; Replace with dots the characters that should be kept");
+                    Console.WriteLine("         --keep-extracted-iso      -> Prevents the extractedISO folder from being deleted after the end of the process");
                     return;
                 }
 
@@ -48,6 +52,21 @@ namespace UniversalISOBuilder
                 {
                     isSilent = true;
                     Console.WriteLine("Silent Mode: true");
+                }
+
+                if (args.Contains("--always-single-choice"))
+                {
+                    singleChoice = "Always";
+                }
+                else if (args.Contains("--never-single-choice"))
+                {
+                    singleChoice = "Never";
+                }
+
+                if (args.Contains("--title-id"))
+                {
+                    newTitleID = args[Array.IndexOf(args, "--title-id") + 1];
+                    if(newTitleID.Length != 6) { Console.WriteLine("Invalid TitleID " + newTitleID + "."); return; }
                 }
 
                 if (args.Contains("--keep-extracted-iso"))
@@ -71,7 +90,7 @@ namespace UniversalISOBuilder
                 {
                     Console.WriteLine("Can't find ISO or XML file: No such file or directory.");
                 }
-                doStuff(ISOPath, xmlPath, rootPath, outPath, isSilent, deleteISO);
+                doStuff(ISOPath, xmlPath, rootPath, outPath, singleChoice, newTitleID, isSilent, deleteISO);
                 return;
             }
             else // No paths defined? Ask for them.
@@ -118,7 +137,7 @@ namespace UniversalISOBuilder
                                             outPath = ((FileStream)(sw.BaseStream)).Name;
                                             sw.Close();
 
-                                            doStuff(dialog.FileName, dialog2.FileName, dialog3.FileName, outPath, isSilent, deleteISO);
+                                            doStuff(dialog.FileName, dialog2.FileName, dialog3.FileName, outPath, singleChoice, newTitleID, isSilent, deleteISO);
                                         }
                                         else
                                         {
@@ -149,7 +168,7 @@ namespace UniversalISOBuilder
             }
         }
 
-        public void doStuff(string ISOPath, string xmlPath, string rootPath, string outPath, bool isSilent, bool deleteISO)
+        public void doStuff(string ISOPath, string xmlPath, string rootPath, string outPath, string singleChoice, string newTitleID, bool isSilent, bool deleteISO)
         {
 
             XmlRootAttribute xRoot = new XmlRootAttribute();
@@ -191,6 +210,12 @@ namespace UniversalISOBuilder
 
             Console.WriteLine("TitleID found: " + titleID + "\r\nGame name found: " + gameName + "\r\n");
 
+            if(fullXML.id.game != gameID)
+            {
+                Console.WriteLine("This riivolution patch only applied to the game that has the TitleID " + fullXML.id.game + ".\r\nYours uses the TitleID " + gameID + " and therefore cannot be patched.");
+                return;
+            }
+
             List<string> supportedRegions = new List<string>();
             foreach(riivolutionIDRegion reg in fullXML.id.region)
             {
@@ -202,6 +227,11 @@ namespace UniversalISOBuilder
                 return;
             }
 
+            if(newTitleID == "")
+            {
+                Console.WriteLine("No custom Title ID were specified, therefore your mod will use the same save slot as the game you're modding, which could cause issues with some mods!");
+            }
+
             Console.WriteLine("Extracting ISO...");
 
             if (ISOPath.Contains(" "))
@@ -211,7 +241,91 @@ namespace UniversalISOBuilder
 
             runCommand("tools\\wit.exe", "extract -s " + ISOPath + " -1 -n " + titleID + " . extractedISO --psel=DATA -ovv", isSilent);
 
-            Console.WriteLine("ISO Extracted.\r\nCopying files from " + fullXML.patch[0].folder.Length + " folders...");
+            Console.WriteLine("ISO Extracted.");
+
+            List<riivolutionPatch> patches = new List<riivolutionPatch>();
+
+            //Console.WriteLine("More than one patch was found! Please choose which patches do you want to enable:\r\n");*/
+
+            if (!(fullXML.options.section.Length == 1 && fullXML.options.section[0].option.Length == 1 && fullXML.options.section[0].option[0].choice.Length == 1))
+            {
+                foreach (riivolutionOptionsSection section in fullXML.options.section)
+                {
+                    Console.WriteLine("-Section: \"" + section.name + "\"");
+                    foreach (riivolutionOptionsSectionOption option in section.option)
+                    {
+                        Console.WriteLine("  Option: \"" + option.name + "\"");
+                        if (option.choice.Length > 1)
+                        {
+                            Console.WriteLine("   Choices available:\r\n    0. None");
+                            List<string> choices = new List<string>();
+                            for (int i = 0; i < option.choice.Length; i++)
+                            {
+                                Console.WriteLine("    " + (i + 1) + ". " + option.choice[i].name);
+                                choices.Add(option.choice[i].name);
+                            }
+                            int choosed = -1;
+                            while (true)
+                            {
+                                Console.Write("Please enter the number of the choice you want to use: ");
+                                try {
+                                    choosed = Convert.ToInt32(Console.ReadLine());
+                                }
+                                catch (Exception e)
+                                {
+                                    Console.WriteLine("That's not a number!");
+                                    continue;
+                                }
+
+                                if (choosed <= choices.Count && choosed >= 0)
+                                {
+                                    break;
+                                }
+                                else
+                                {
+                                    Console.WriteLine("This isn't a valid choice!");
+                                }
+                            }
+                            if(choosed == 0)
+                            {
+                                continue;
+                            }
+                            foreach (riivolutionOptionsSectionOptionChoicePatch patch in option.choice[choosed - 1].patch)
+                            {
+                                patches.Add(fullXML.patch[findPatchIndexByName(patch.id, fullXML.patch)]);
+                            }
+                        }
+                        else
+                        {
+                            string answer = "";
+                            if (singleChoice == "Ask")
+                            {
+                                Console.Write("   Only one choice found: " + option.choice[0].name + " - Use it? (Yes/No): ");
+                                answer = Console.ReadLine();
+                            }
+                            else if (singleChoice == "Always")
+                            {
+                                answer = "yes";
+                            }
+
+                            if (answer.Equals("yes", StringComparison.InvariantCultureIgnoreCase) || answer.Equals("y", StringComparison.InvariantCultureIgnoreCase))
+                            {
+                                foreach (riivolutionOptionsSectionOptionChoicePatch patch in option.choice[0].patch)
+                                {
+                                    patches.Add(fullXML.patch[findPatchIndexByName(patch.id, fullXML.patch)]);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            else // No need to ask what to enable and what to disable if there's only one possiblity.
+            {
+                foreach (riivolutionOptionsSectionOptionChoicePatch patch in fullXML.options.section[0].option[0].choice[0].patch)
+                {
+                    patches.Add(fullXML.patch[findPatchIndexByName(patch.id, fullXML.patch)]);
+                }
+            }
 
             string rootEnd = "";
             if (rootPath.Contains(" "))
@@ -225,67 +339,113 @@ namespace UniversalISOBuilder
             copy.StartInfo.UseShellExecute = false;
             copy.StartInfo.RedirectStandardOutput = true;
             copy.StartInfo.WorkingDirectory = Path.GetDirectoryName(Application.ExecutablePath);
-            foreach (riivolutionPatchFolder folder in fullXML.patch[0].folder)
+
+            foreach(riivolutionPatch patch in patches)
             {
-                // Region-changing folders
-                if(folder.external.Contains("{$__region}"))
+                if(patch.folder == null) { patch.folder = new riivolutionPatchFolder[0]; }
+                if(patch.folder.Length > 0)
                 {
-                    if(!isSilent) { Console.WriteLine(folder.external + " is a region-changing folder, changing it to " + folder.external.Replace("{$__region}", region)); }
-                    folder.external = folder.external.Replace("{$__region}", region);
+                    Console.WriteLine("Copying files from " + patch.folder.Length + " folders...");
+                }
+                else
+                {
+                    if (!isSilent) { Console.WriteLine("No folder patches found for patch " + patch.id); }
                 }
 
-                // Creating unexisting folders
-                if (folder.create && !Directory.Exists(Path.GetDirectoryName(Application.ExecutablePath) + "\\extractedISO\\files" + folder.disc.Replace('/', '\\')))
+                foreach (riivolutionPatchFolder folder in patch.folder)
                 {
-                    if (!isSilent) { Console.WriteLine("Creating directory " + Path.GetDirectoryName(Application.ExecutablePath) + "\\extractedISO\\files" + folder.disc.Replace('/', '\\')); }
-                    runCommand("cmd.exe", "/C mkdir extractedISO\\files" + folder.disc.Replace('/', '\\'), isSilent);
-                }
-
-                // Copying files
-                if ((folder.disc == null || folder.disc == "") ? true : Directory.Exists(Path.GetDirectoryName(Application.ExecutablePath) + "\\extractedISO\\files" + folder.disc.Replace('/', '\\'))) // Avoid running useless copy commands for folders that doesn't exist AND don't have the "created" flag enabled (this is used for region-specific folders in NewerSMBW, for example)
-                {
-                    if (folder.disc != "" && folder.disc != null)
+                    // Changing some stuff
+                    if(folder.external != "" && folder.external != null)
                     {
-                        if (!isSilent) { Console.WriteLine("Copying " + rootPath + "\\" + folder.external.Replace('/', '\\') + rootEnd); }
-                        copy.StartInfo.Arguments = "/C xcopy " + rootPath + "\\" + folder.external.Replace('/', '\\') + rootEnd + " extractedISO\\files" + folder.disc.Replace('/', '\\') + "\\ /E /C /I /Y";
+                        folder.external = folder.external.Replace('/', '\\');
+                        if (folder.external.EndsWith("\\")) { folder.external = folder.external.Substring(0, folder.external.Length - 1); }
                     }
-                    else
+
+                    if(folder.disc != "" && folder.disc != null)
                     {
-                        if (!isSilent) { Console.WriteLine("Searching manually for files contained in " + rootPath + "\\" + folder.external + "\\" + rootEnd); }
-                        foreach (string file in Directory.GetFiles((rootPath + "\\" + folder.external + "\\" + rootEnd).Replace("\"", "")))
+                        folder.disc = folder.disc.Replace('/', '\\');
+                        if (folder.disc.EndsWith("\\")) { folder.disc = folder.disc.Substring(0, folder.disc.Length - 1); }
+                    }
+
+                    // Region-changing folders
+                    if (folder.external.Contains("{$__region}"))
+                    {
+                        if (!isSilent) { Console.WriteLine(folder.external + " is a region-changing folder, changing it to " + folder.external.Replace("{$__region}", region)); }
+                        folder.external = folder.external.Replace("{$__region}", region);
+                    }
+
+                    // Creating unexisting folders
+                    if (folder.create && !Directory.Exists(Path.GetDirectoryName(Application.ExecutablePath) + "\\extractedISO\\files" + folder.disc))
+                    {
+                        if (!isSilent) { Console.WriteLine("Creating directory " + Path.GetDirectoryName(Application.ExecutablePath) + "\\extractedISO\\files" + folder.disc); }
+                        runCommand("cmd.exe", "/C mkdir extractedISO\\files" + folder.disc, isSilent);
+                    }
+
+                    // Copying files
+                    if ((folder.disc == null || folder.disc == "") ? true : Directory.Exists(Path.GetDirectoryName(Application.ExecutablePath) + "\\extractedISO\\files" + folder.disc)) // Avoid running useless copy commands for folders that doesn't exist AND don't have the "created" flag enabled (this is used for region-specific folders in NewerSMBW, for example)
+                    {
+                        if (folder.disc != "" && folder.disc != null)
                         {
-                            if (!isSilent) { Console.WriteLine("Searching for " + file); }
-                            string foundFile = ProcessDirectory(Path.GetDirectoryName(Application.ExecutablePath) + "\\extractedISO\\files\\", file.Split('\\')[file.Split('\\').Length - 1]);
-                            if (foundFile != "")
-                            {
-                                if (!isSilent) { Console.WriteLine("Found file " + foundFile); }
-                                copy.StartInfo.Arguments = "/C copy /b \"" + file + "\" \"" + foundFile + "\"";
-
-                                copy.Start();
-                                if (!isSilent) { Console.WriteLine(copy.StandardOutput.ReadToEnd()); }
-                                copy.WaitForExit();
-                            }
-                            else
-                            {
-                                if (!isSilent) { Console.WriteLine("Cannot find file " + file + " in the disc\r\n"); }
-                                continue;
-                            }
+                            if (!isSilent) { Console.WriteLine("Copying " + rootPath + "\\" + folder.external + rootEnd); }
+                            copy.StartInfo.Arguments = "/C xcopy " + rootPath + "\\" + folder.external + rootEnd + " extractedISO\\files" + folder.disc + "\\ /E /C /I /Y";
                         }
-                        if (!isSilent) { Console.WriteLine(""); } // Just for good-looking purposes.
-                        continue;
+                        else if(Directory.Exists((rootPath + "\\" + folder.external).Replace("\"", "")))
+                        {
+                            if (!isSilent) { Console.WriteLine("Searching manually for files contained in " + rootPath + "\\" + folder.external + "\\" + rootEnd); }
+                            foreach (string file in Directory.GetFiles((rootPath + "\\" + folder.external + "\\" + rootEnd).Replace("\"", "")))
+                            {
+                                if (!isSilent) { Console.WriteLine("Searching for " + file); }
+                                string foundFile = ProcessDirectory(Path.GetDirectoryName(Application.ExecutablePath) + "\\extractedISO\\files\\", file.Split('\\')[file.Split('\\').Length - 1]);
+                                if (foundFile != "")
+                                {
+                                    if (!isSilent) { Console.WriteLine("Found file " + foundFile); }
+                                    copy.StartInfo.Arguments = "/C copy /b \"" + file + "\" \"" + foundFile + "\"";
+
+                                    copy.Start();
+                                    if (!isSilent) { Console.WriteLine(copy.StandardOutput.ReadToEnd()); }
+                                    copy.WaitForExit();
+                                }
+                                else
+                                {
+                                    if (!isSilent) { Console.WriteLine("Cannot find file " + file + " in the disc\r\n"); }
+                                    continue;
+                                }
+                            }
+                            if (!isSilent) { Console.WriteLine(""); } // Just for good-looking purposes.
+                            continue;
+                        }
+
+                        copy.Start();
+                        if (!isSilent) { Console.WriteLine(copy.StandardOutput.ReadToEnd()); } else { copy.StandardOutput.ReadToEnd(); }
+                        copy.WaitForExit();
                     }
-
-                    copy.Start();
-                    if (!isSilent) { Console.WriteLine(copy.StandardOutput.ReadToEnd()); } else { copy.StandardOutput.ReadToEnd(); }
-                    copy.WaitForExit();
                 }
-            }
-            
-            Console.WriteLine("Files copied.\r\nPatching DOL...");
 
-            runCommand("tools\\Asu's Dolpatcher.exe", "\"" + Path.GetDirectoryName(Application.ExecutablePath) + "\\extractedISO\\sys\\main.dol\" \"" + xmlPath + "\" \"" + Path.GetDirectoryName(Application.ExecutablePath) + "\\extractedISO\\sys\\main.dol\" --binary-files-dir " + rootPath + rootEnd + " --always-create-sections", isSilent);
+                Console.WriteLine("Files copied.\r\nPatching DOL...\r\n");
+
+                runCommand("tools\\Asu's Dolpatcher.exe", "\"" + Path.GetDirectoryName(Application.ExecutablePath) + "\\extractedISO\\sys\\main.dol\" \"" + xmlPath + "\" \"" + Path.GetDirectoryName(Application.ExecutablePath) + "\\extractedISO\\sys\\main.dol\" --binary-files-dir " + rootPath + rootEnd + " --only-patches \"" + patch.id + "\" --region " + region + " --always-create-sections", isSilent);
+
+            }
 
             Console.WriteLine("Rebuilding...");
+
+            if(newTitleID != "")
+            {
+                string oldtid = titleID;
+                char[] oldttid = titleID.ToCharArray();
+                char[] newttid = newTitleID.ToCharArray();
+                for(int i = 0; i < 6; i++)
+                {
+                    if(newttid[i] == '.')
+                    {
+                        continue;
+                    }
+                    oldttid[i] = newttid[i];
+                }
+                titleID = new string(oldttid);
+                gameID = titleID.Substring(0, 3);
+                Console.WriteLine("Changing TitleID from " + oldtid + " to " + newTitleID + " -> " + titleID);
+            }
 
             runCommand("tools\\wit.exe", "copy extractedISO \"" + outPath + "\" -ovv --disc-id=" + titleID + " --tt-id=" + gameID + " --name \"" + gameName + " [MODDED]\"", isSilent);
 
@@ -346,6 +506,18 @@ namespace UniversalISOBuilder
             if (!isSilent) { Console.WriteLine(command.StandardOutput.ReadToEnd()); }
             command.WaitForExit();
         }
+
+        public int findPatchIndexByName(string name, riivolutionPatch[] patches)
+        {
+            for(int i = 0; i < patches.Length; i++)
+            {
+                if(patches[i].id == name)
+                {
+                    return i;
+                }
+            }
+            return -1;
+        }
     }
 
     public class riivolutionXML
@@ -375,6 +547,10 @@ namespace UniversalISOBuilder
 
     public class riivolutionID
     {
+        [XmlAttribute(AttributeName = "game")]
+        public string game { get; set; }
+
+
         [XmlElement(ElementName = "region")]
         public riivolutionIDRegion[] region { get; set; }
     }
@@ -477,6 +653,9 @@ namespace UniversalISOBuilder
 
         [XmlAttribute(AttributeName = "original")]
         public string original { get; set; }
+
+        [XmlAttribute(AttributeName = "target")]
+        public string target { get; set; }
 
         [XmlAttribute(AttributeName = "valuefile")]
         public string valuefile { get; set; }
