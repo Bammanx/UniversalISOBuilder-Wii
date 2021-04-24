@@ -1,4 +1,4 @@
-# Asu's Riivolution Universal ISO Builder - v0.6.0 BETA
+# Asu's Riivolution Universal ISO Builder
 A tool to patch Nintendo Wii ISO files using Riivolution XML files.
 
 Special Beta Test - Please build all the mods you can think of with this ISO Builder and report me any bugs on discord: Asu-chan#2929

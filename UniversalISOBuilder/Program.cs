@@ -15,8 +15,8 @@ namespace UniversalISOBuilder
         [STAThread]
         static void Main(string[] args)
         {
-            Console.WriteLine("Asu's Riivolution Universal ISO Builder - v0.6.0");
-            Console.WriteLine("Special Beta Test Build - Please build all the mods you can think of with this ISO Builder and report me any bugs on discord: Asu-chan#2929");
+            Console.WriteLine("Asu's Riivolution Universal ISO Builder - v0.7.0");
+            Console.WriteLine("Special Beta Test Build - Please build all the mods you can think of with this ISO Builder and report any bugs to me on Discord: Asu-chan#2929");
             RiivolutionUniversalISOBuilder ruib = new RiivolutionUniversalISOBuilder();
             ruib.Main(args);
         }
@@ -39,11 +39,11 @@ namespace UniversalISOBuilder
                     Console.WriteLine("       UniversalISOBuilder.exe [options]");
                     Console.WriteLine("       UniversalISOBuilder.exe");
                     Console.WriteLine("       In the 2nd and 3rd cases, you will be asked for the file paths.\r\n\r\n"); // Thanks to Mullkaw for correcting my weird-sounding english! ^^
-                    Console.WriteLine("Options: --silent                  -> Prevents from displaying any console outputs apart from the necessary ones");
-                    Console.WriteLine("         --keep-extracted-iso      -> Prevents the extractedISO folder from being deleted after the end of the process");
+                    Console.WriteLine("Options: --silent                  -> Prevents the display of unnecessary console output");
+                    Console.WriteLine("         --keep-extracted-iso      -> Prevents the extractedISO folder from being deleted after the process");
                     Console.WriteLine("         --always-single-choice    -> Enables by default any option that has only one choice");
-                    Console.WriteLine("         --never-single-choice     -> Disable by default any option that has only one choice");
-                    Console.WriteLine("         --title-id <TitleID>      -> Changes the TitleID of the output rom; Replace with dots the characters that should be kept");
+                    Console.WriteLine("         --never-single-choice     -> Disables by default any option that has only one choice");
+                    Console.WriteLine("         --title-id <TitleID>      -> Changes the TitleID of the output ROM; Use dot for characters that should be unchanged");
                     Console.WriteLine("         --keep-extracted-iso      -> Prevents the extractedISO folder from being deleted after the end of the process");
                     return;
                 }
@@ -96,10 +96,10 @@ namespace UniversalISOBuilder
             else // No paths defined? Ask for them.
             {
                 // Getting ISO path
-                Console.WriteLine("Please select an ISO file to patch.");
+                Console.WriteLine("Please select an ISO/WBFS ROM to patch.");
                 using (OpenFileDialog dialog = new OpenFileDialog())
                 {
-                    dialog.Filter = "Nintendo Wii ISO Rom File|*.iso|All files (*.*)|*.*";
+                    dialog.Filter = "Nintendo Wii ROM File|*.iso;*.wbfs";
                     dialog.FilterIndex = 1;
                     dialog.RestoreDirectory = true;
                     if (dialog.ShowDialog() == DialogResult.OK)
@@ -109,7 +109,7 @@ namespace UniversalISOBuilder
                         // Getting XML path
                         using (OpenFileDialog dialog2 = new OpenFileDialog())
                         {
-                            dialog2.Filter = "Riivolution Extensible Markup Language File|*.xml|All files (*.*)|*.*";
+                            dialog2.Filter = "Riivolution Extensible Markup Language File|*.xml";
                             dialog2.FilterIndex = 1;
                             dialog2.RestoreDirectory = true;
                             if (dialog2.ShowDialog() == DialogResult.OK)
@@ -123,12 +123,12 @@ namespace UniversalISOBuilder
                                     dialog3.IsFolderPicker = true;
                                     if (dialog3.ShowDialog() == CommonFileDialogResult.Ok)
                                     {
-                                        Console.WriteLine("Please select where do you want your patched rom file to be saved.");
+                                        Console.WriteLine("Please select where you want your patched ROM file to be saved.");
 
                                         // Getting output ISO/WBFS path
                                         SaveFileDialog textDialog;
                                         textDialog = new SaveFileDialog();
-                                        textDialog.Filter = "Nintendo Wii ISO Rom File|*.iso|Nintendo Wii WBFS Rom File|*.wbfs|All files (*.*)|*.*";
+                                        textDialog.Filter = "Nintendo Wii ROM File|*.iso;*.wbfs";
                                         textDialog.DefaultExt = "wbfs";
                                         if (textDialog.ShowDialog() == DialogResult.OK)
                                         {
@@ -161,11 +161,12 @@ namespace UniversalISOBuilder
                     }
                     else
                     {
-                        Console.WriteLine("ISO selecting cancelled. Closing...");
+                        Console.WriteLine("ISO/WBFS selecting cancelled. Closing...");
                         return;
                     }
                 }
             }
+            Console.ReadKey();
         }
 
         public void doStuff(string ISOPath, string xmlPath, string rootPath, string outPath, string singleChoice, string newTitleID, bool isSilent, bool deleteISO)
@@ -179,18 +180,24 @@ namespace UniversalISOBuilder
             MemoryStream stream = new MemoryStream(File.ReadAllBytes(xmlPath));
             riivolutionXML fullXML = (riivolutionXML)serializer.Deserialize(stream);
 
-            if (!isSilent) { Console.WriteLine("XML Deserialized."); } else { Console.WriteLine("Please wait, this process can take up a few minutes...\r\nXML Deserialized."); }
+            bool isWbfs = (Path.GetExtension(ISOPath) == ".wbfs");
+            int wbfsOffset = 0;
+            if (isWbfs) wbfsOffset = 0x200;
+
+            if (!isSilent) { Console.WriteLine("XML Deserialized."); } else { Console.WriteLine("Please wait, this process can take a few minutes...\r\nXML Deserialized."); }
 
             List<byte> id = new List<byte>();
             List<byte> name = new List<byte>();
             using (FileStream iso = new FileStream(ISOPath, FileMode.Open))
             {
+                iso.Position = wbfsOffset;
+
                 for (int i = 0; i < 8; i++)
                 {
                     id.Add((byte)iso.ReadByte());
                 }
 
-                iso.Position = 0x20;
+                iso.Position = wbfsOffset + 0x20;
 
                 while(true)
                 {
@@ -212,7 +219,7 @@ namespace UniversalISOBuilder
 
             if(fullXML.id.game != gameID)
             {
-                Console.WriteLine("This riivolution patch only applied to the game that has the TitleID " + fullXML.id.game + ".\r\nYours uses the TitleID " + gameID + " and therefore cannot be patched.");
+                Console.WriteLine("This riivolution patch should only be applied to the game with the TitleID " + fullXML.id.game + ".\r\nYours uses the TitleID " + gameID + " and therefore cannot be patched.");
                 return;
             }
 
@@ -229,10 +236,10 @@ namespace UniversalISOBuilder
 
             if(newTitleID == "")
             {
-                Console.WriteLine("No custom Title ID were specified, therefore your mod will use the same save slot as the game you're modding, which could cause issues with some mods!");
+                Console.WriteLine("No custom TitleID was specified, so your mod will use the same save slot as the game you're modding. This could cause issues with some mods!");
             }
 
-            Console.WriteLine("Extracting ISO...");
+            Console.WriteLine("Extracting ROM...");
 
             if (ISOPath.Contains(" "))
             {
@@ -241,11 +248,11 @@ namespace UniversalISOBuilder
 
             runCommand("tools\\wit.exe", "extract -s " + ISOPath + " -1 -n " + titleID + " . extractedISO --psel=DATA -ovv", isSilent);
 
-            Console.WriteLine("ISO Extracted.");
+            Console.WriteLine("ROM Extracted.");
 
             List<riivolutionPatch> patches = new List<riivolutionPatch>();
 
-            //Console.WriteLine("More than one patch was found! Please choose which patches do you want to enable:\r\n");*/
+            //Console.WriteLine("More than one patch was found! Please choose which patches you want to enable:\r\n");*/
 
             if (!(fullXML.options.section.Length == 1 && fullXML.options.section[0].option.Length == 1 && fullXML.options.section[0].option[0].choice.Length == 1))
             {
@@ -283,7 +290,7 @@ namespace UniversalISOBuilder
                                 }
                                 else
                                 {
-                                    Console.WriteLine("This isn't a valid choice!");
+                                    Console.WriteLine("That isn't a valid choice!");
                                 }
                             }
                             if(choosed == 0)
@@ -370,7 +377,7 @@ namespace UniversalISOBuilder
                     // Region-changing folders
                     if (folder.external.Contains("{$__region}"))
                     {
-                        if (!isSilent) { Console.WriteLine(folder.external + " is a region-changing folder, changing it to " + folder.external.Replace("{$__region}", region)); }
+                        if (!isSilent) { Console.WriteLine(folder.external + " is a regional folder, which makes it " + folder.external.Replace("{$__region}", region)); }
                         folder.external = folder.external.Replace("{$__region}", region);
                     }
 
