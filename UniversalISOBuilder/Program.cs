@@ -43,7 +43,7 @@ namespace UniversalISOBuilder
                     Console.WriteLine("         --keep-extracted-iso      -> Prevents the extractedISO folder from being deleted after the process");
                     Console.WriteLine("         --always-single-choice    -> Enables by default any option that has only one choice");
                     Console.WriteLine("         --never-single-choice     -> Disables by default any option that has only one choice");
-                    Console.WriteLine("         --title-id <TitleID>      -> Changes the TitleID of the output ROM; Use dot for characters that should be unchanged");
+                    Console.WriteLine("         --title-id <TitleID>      -> Changes the TitleID of the output ROM. Use \".\" for characters that should be unmodified");
                     Console.WriteLine("         --keep-extracted-iso      -> Prevents the extractedISO folder from being deleted after the end of the process");
                     return;
                 }
