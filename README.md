@@ -8,8 +8,6 @@ I (Meatball132) intend to create a better tool some time during the year 2022, h
 # Asu's Riivolution Universal ISO Builder
 A tool to patch Nintendo Wii ISO files using Riivolution XML files.
 
-Special Beta Test - Please build all the mods you can think of with this ISO Builder and report me any bugs on discord: Asu-chan#2929
-
 # Usage
 UniversalISOBuilder.exe \<ISO Path\> \<Riivolution XML file path\> \<Root folder path\> \<Output ISO/WBFS path\> [options]
 
